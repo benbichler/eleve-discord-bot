@@ -38,36 +38,55 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 class DeleteJobButton(ui.View):
     def __init__(self, job_id: int):
-        super().__init__()
+        super().__init__(timeout=None)  # Make the button persistent
         self.job_id = job_id
 
     @ui.button(label="Delete Job", style=discord.ButtonStyle.danger)
     async def delete_job(self, interaction: Interaction, button: ui.Button):
-        # Check admin permissions
-        is_admin = await check_admin_role(interaction)
-        if not is_admin:
-            await interaction.response.send_message(
-                "You do not have permission to delete this job.", ephemeral=True
-            )
-            return
+        try:
+            # Check admin permissions
+            is_admin = await check_admin_role(interaction)
+            if not is_admin:
+                await interaction.response.send_message(
+                    "You do not have permission to delete this job.", ephemeral=True
+                )
+                return
 
-        # Load jobs and remove the specific job
-        data = load_jobs()
-        job = next((job for job in data["jobs"] if job["id"] == self.job_id), None)
-        
-        if not job:
-            await interaction.response.send_message("Job not found.", ephemeral=True)
-            return
+            # Load jobs and remove the specific job
+            data = load_jobs()
+            job = next((job for job in data["jobs"] if job["id"] == self.job_id), None)
+            
+            if not job:
+                await interaction.response.send_message("Job not found.", ephemeral=True)
+                return
 
-        # Remove the job from the list
-        data["jobs"] = [j for j in data["jobs"] if j["id"] != self.job_id]
-        save_jobs(data)
+            # Remove the job from the list
+            data["jobs"] = [j for j in data["jobs"] if j["id"] != self.job_id]
+            save_jobs(data)
 
-        # Delete the original message with the job embed
-        await interaction.message.delete()
+            # Delete the original message with the job embed
+            try:
+                await interaction.message.delete()
+            except discord.errors.NotFound:
+                # Handle case where message was already deleted
+                pass
 
-        # Confirm deletion
-        await interaction.response.send_message(f"Job {self.job_id} has been deleted.", ephemeral=True)
+            # Confirm deletion
+            await interaction.response.send_message(f"Job {self.job_id} has been deleted.", ephemeral=True)
+            
+        except Exception as e:
+            # Log the error and send a user-friendly message
+            print(f"Error in delete_job: {str(e)}")
+            try:
+                await interaction.response.send_message(
+                    "An error occurred while deleting the job. Please try again.", 
+                    ephemeral=True
+                )
+            except discord.errors.InteractionResponded:
+                await interaction.followup.send(
+                    "An error occurred while deleting the job. Please try again.",
+                    ephemeral=True
+                )
 
 # Helper Functions
 def load_jobs():
